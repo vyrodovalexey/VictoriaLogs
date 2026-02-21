@@ -145,11 +145,10 @@ func (fg *filterGeneric) matchRow(fields []Field) bool {
 	return false
 }
 
-func (fg *filterGeneric) applyToBlockSearch(bs *blockSearch, bm *bitmap) {
+func (fg *filterGeneric) applyToBlockSearch(bs *blockSearch, bm *bitmap) error {
 	if !fg.isWildcard {
 		// Fast path - apply filter only to the given fieldName.
-		fg.f.applyToBlockSearchByField(bs, bm, fg.fieldName)
-		return
+		return fg.f.applyToBlockSearchByField(bs, bm, fg.fieldName)
 	}
 
 	// Slow path - apply filter to all the matching fields.
@@ -172,14 +171,19 @@ func (fg *filterGeneric) applyToBlockSearch(bs *blockSearch, bm *bitmap) {
 		}
 
 		bmTmp.copyFrom(bmResult)
-		fg.f.applyToBlockSearchByField(bs, bmTmp, fieldName)
+		if err := fg.f.applyToBlockSearchByField(bs, bmTmp, fieldName); err != nil {
+			return err
+		}
 		bmResult.andNot(bmTmp)
 		if bmResult.isZero() {
-			return
+			return nil
 		}
 	}
 
-	csh := bs.getColumnsHeader()
+	csh, err := bs.getColumnsHeader()
+	if err != nil {
+		return err
+	}
 
 	for _, cc := range csh.constColumns {
 		if isSpecialColumn(cc.Name) {
@@ -193,10 +197,12 @@ func (fg *filterGeneric) applyToBlockSearch(bs *blockSearch, bm *bitmap) {
 		}
 
 		bmTmp.copyFrom(bmResult)
-		fg.f.applyToBlockSearchByField(bs, bmTmp, cc.Name)
+		if err := fg.f.applyToBlockSearchByField(bs, bmTmp, cc.Name); err != nil {
+			return err
+		}
 		bmResult.andNot(bmTmp)
 		if bmResult.isZero() {
-			return
+			return nil
 		}
 	}
 
@@ -214,21 +220,23 @@ func (fg *filterGeneric) applyToBlockSearch(bs *blockSearch, bm *bitmap) {
 		}
 
 		bmTmp.copyFrom(bmResult)
-		fg.f.applyToBlockSearchByField(bs, bmTmp, ch.name)
+		if err := fg.f.applyToBlockSearchByField(bs, bmTmp, ch.name); err != nil {
+			return err
+		}
 		bmResult.andNot(bmTmp)
 		if bmResult.isZero() {
-			return
+			return nil
 		}
 	}
 
 	bm.andNot(bmResult)
+	return nil
 }
 
-func (fg *filterGeneric) applyToBlockResult(br *blockResult, bm *bitmap) {
+func (fg *filterGeneric) applyToBlockResult(br *blockResult, bm *bitmap) error {
 	if !fg.isWildcard {
 		// Fast path - apply filter to the given fieldName
-		fg.f.applyToBlockResultByField(br, bm, fg.fieldName)
-		return
+		return fg.f.applyToBlockResultByField(br, bm, fg.fieldName)
 	}
 
 	// Slow path - apply filter to all the matching fields.
@@ -248,14 +256,17 @@ func (fg *filterGeneric) applyToBlockResult(br *blockResult, bm *bitmap) {
 		}
 
 		bmTmp.copyFrom(bmResult)
-		fg.f.applyToBlockResultByField(br, bmTmp, c.name)
+		if err := fg.f.applyToBlockResultByField(br, bmTmp, c.name); err != nil {
+			return err
+		}
 		bmResult.andNot(bmTmp)
 		if bmResult.isZero() {
-			return
+			return nil
 		}
 	}
 
 	bm.andNot(bmResult)
+	return nil
 }
 
 func quoteFieldNameIfNeeded(s string) string {

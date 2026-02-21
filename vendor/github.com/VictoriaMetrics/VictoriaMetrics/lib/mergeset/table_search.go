@@ -3,8 +3,10 @@ package mergeset
 import (
 	"bytes"
 	"container/heap"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 
 	"github.com/VictoriaMetrics/VictoriaMetrics/lib/logger"
 	"github.com/VictoriaMetrics/VictoriaMetrics/lib/slicesutil"
@@ -174,7 +176,8 @@ func (ts *TableSearch) nextBlock() error {
 
 // Error returns the last error in ts.
 func (ts *TableSearch) Error() error {
-	if ts.err == io.EOF {
+	var netErr net.Error
+	if ts.err == io.EOF || errors.As(ts.err, &netErr) {
 		return nil
 	}
 	return ts.err

@@ -98,7 +98,7 @@ func (pu *pipeUnpackJSON) visitSubqueries(visitFunc func(q *Query)) {
 	pu.iff.visitSubqueries(visitFunc)
 }
 
-func (pu *pipeUnpackJSON) newPipeProcessor(_ int, _ <-chan struct{}, _ func(), ppNext pipeProcessor) pipeProcessor {
+func (pu *pipeUnpackJSON) newPipeProcessor(_ int, _ <-chan struct{}, cancel func(error), ppNext pipeProcessor) pipeProcessor {
 	unpackJSON := func(uctx *fieldsUnpackerContext, s string) {
 		if len(s) == 0 || s[0] != '{' {
 			// This isn't a JSON object
@@ -140,7 +140,7 @@ func (pu *pipeUnpackJSON) newPipeProcessor(_ int, _ <-chan struct{}, _ func(), p
 		}
 		PutJSONParser(p)
 	}
-	return newPipeUnpackProcessor(unpackJSON, ppNext, pu.fromField, pu.resultPrefix, pu.keepOriginalFields, pu.skipEmptyResults, pu.iff)
+	return newPipeUnpackProcessor(unpackJSON, ppNext, cancel, pu.fromField, pu.resultPrefix, pu.keepOriginalFields, pu.skipEmptyResults, pu.iff)
 }
 
 func parsePipeUnpackJSON(lex *lexer) (pipe, error) {
