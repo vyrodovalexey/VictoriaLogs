@@ -1809,6 +1809,27 @@ func ParseStatsQuery(s string, timestamp int64) (*Query, error) {
 	return q, nil
 }
 
+func ParsePipes(s string) (*Query, error) {
+	lex := newLexer(s, time.Now().UnixNano())
+
+	pipes, err := parsePipes(lex)
+	if err != nil {
+		return nil, err
+	}
+	if !lex.isEnd() {
+		return nil, fmt.Errorf("unexpected unparsed tail; context: [%s]; tail: [%s]", lex.context(), lex.rawToken+lex.s)
+	}
+
+	q := &Query{
+		f:         &filterNoop{},
+		pipes:     pipes,
+		timestamp: lex.currentTimestamp,
+	}
+	q.optimize()
+	q.initStatsRateFuncsFromTimeFilter()
+	return q, nil
+}
+
 // HasGlobalTimeFilter returns true when query contains a global time filter.
 func (q *Query) HasGlobalTimeFilter() bool {
 	start, end := q.GetFilterTimeRange()
@@ -3742,6 +3763,55 @@ func (q *Query) isStarQuery() bool {
 	default:
 		return false
 	}
+}
+
+type QueryRowExecutor struct {
+	f    filter
+	proc pipeProcessor
+
+	stopCh chan struct{}
+}
+
+func NewQueryRowExecutor(q *Query) *QueryRowExecutor {
+	concurrency := cgroup.AvailableCPUs()
+	stopCh := make(chan struct{})
+
+	writeBlock := func(workerID uint, br *blockResult) {
+		println("foobar")
+		fmt.Printf("worker %d, %+v", workerID, br)
+	}
+	noop := newNoopPipeProcessor(stopCh, writeBlock)
+
+	prev := noop
+	for i := len(q.pipes) - 1; i >= 0; i-- {
+		p := q.pipes[i]
+		cancel := func() {
+			panic(fmt.Errorf("BUG: pipe %T was cancelled", p))
+		}
+		proc := p.newPipeProcessor(concurrency, stopCh, cancel, prev)
+		prev = proc
+	}
+
+	return &QueryRowExecutor{
+		f:      q.f,
+		stopCh: stopCh,
+		proc:   prev,
+	}
+}
+
+func (e *QueryRowExecutor) ApplyToRow(row []Field) []Field {
+	if e.f != nil && !e.f.matchRow(row) {
+		return row
+	}
+
+	br := &blockResult{}
+	br.initFromRow(row)
+	e.proc.writeBlock(0, br)
+	return nil
+}
+
+func (e *QueryRowExecutor) Stop() {
+	close(e.stopCh)
 }
 
 func getFieldNameFromPipes(pipes []pipe) (string, error) {

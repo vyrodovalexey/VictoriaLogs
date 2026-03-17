@@ -155,6 +155,30 @@ func (br *blockResult) initFromFilterAllColumns(brSrc *blockResult, bm *bitmap) 
 	}
 }
 
+func (br *blockResult) initFromRow(row []Field) {
+	br.reset()
+
+	br.bm = &bitmap{}
+	br.bm.init(1)
+	br.bm.setBit(0)
+
+	br.rowsLen = 1
+	var columns []blockResultColumn
+	for _, f := range row {
+		vals := []string{f.Value}
+		columns = append(columns, blockResultColumn{
+			name:          f.Name,
+			valueType:     valueTypeString,
+			valuesEncoded: vals,
+			values:        vals,
+		})
+	}
+
+	for _, c := range columns {
+		br.appendFilteredColumn(&c)
+	}
+}
+
 // appendFilteredColumn adds cSrc to br.
 //
 // the br is valid until cSrc is updated.
